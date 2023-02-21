@@ -34,13 +34,28 @@ func main() {
 
 	// Power router setup
 	router := &Router{
-		Devices: make(map[string]*ConsumerDevice),
+		Devices: make([]Device, len(configuration.Consumers)),
 	}
 
-	// Hook everything into the router
-	for _, cons := range configuration.Consumers {
-		router.Devices[cons.Entity] = &ConsumerDevice{
-			Consumer: &cons,
+	// Get ga.Service, currently not exported
+	//service := reflect.ValueOf(app).Elem().FieldByName("service").Interface().(*ga.Service)
+	service := app.GetService()
+
+	// Instantiate devices to consume power
+	for i, cons := range configuration.Consumers {
+		switch cons.Type {
+		case "binary":
+			router.Devices[i] = &BinaryDevice{
+				Service:  service,
+				Consumer: &cons,
+			}
+		case "linear":
+			router.Devices[i] = &LinearDevice{
+				Service:  service,
+				Consumer: &cons,
+			}
+		default:
+			panic("Device " + cons.Name + " has unknown type: " + cons.Type)
 		}
 	}
 

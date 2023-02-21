@@ -44,6 +44,8 @@ type BatteryConfig struct {
 
 type Consumer struct {
 	// Entity to control
+	// For type "binary", the entity should be a "switch.XXX" or "light.XXX"
+	// For type "linear", the entity should be a "number.XXX", accepting values between 0.0 and 1.0
 	Entity string `yaml:"entity"`
 
 	// User friendly name
@@ -55,4 +57,20 @@ type Consumer struct {
 	// "binary" (default; device can be turned on and off)
 	// "linear" (device power can be controlled between 0.0 and 1.0)
 	Type string `yaml:"type"`
+
+	// For binary devices:
+	// When this device gets turned on, this is the minimum time it should remain on.
+	// This is to prevent the device from being turned on/off rapidly.
+	MinimumOnMinutes int `yaml:"minimumOnMinutes"`
+
+	// For binary devices:
+	// If this device has 2300W of power, we have a budget of 2000W and AllowBuyPower is 300W,
+	// then it will be turned on.
+	// It is reasonable to set this to a non-zero value, if you rather want to buy a little than sell a lot.
+	AllowBuyPower int `yaml:"allowBuyPower"`
+
+	// After toggling this device, wait this many seconds before taking further actions.
+	// E.g. if this device is a whirlpool that takes 10 seconds to turn on or off and start/stop consuming power, set it to 10.
+	// If this is a linear boiler, then this could be just 1 or 2 seconds.
+	DelaySeconds int `yaml:"delaySeconds"`
 }

@@ -58,10 +58,14 @@ type Consumer struct {
 	// "linear" (device power can be controlled between 0.0 and 1.0)
 	Type string `yaml:"type"`
 
+	// For linear devices:
+	// Don't send less than this many watts to the device, turn it off instead
+	MinPower int `yaml:"minPower"`
+
 	// For binary devices:
 	// When this device gets turned on, this is the minimum time it should remain on.
 	// This is to prevent the device from being turned on/off rapidly.
-	MinimumOnMinutes int `yaml:"minimumOnMinutes"`
+	MinOnMinutes int `yaml:"minOnMinutes"`
 
 	// For binary devices:
 	// If this device has 2300W of power, we have a budget of 2000W and AllowBuyPower is 300W,

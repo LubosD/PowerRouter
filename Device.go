@@ -1,6 +1,9 @@
 package main
 
 type Device interface {
+	// Initialize, read current value from HASS etc.
+	Setup()
+
 	// Device name
 	Name() string
 

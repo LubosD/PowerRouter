@@ -39,24 +39,25 @@ func main() {
 
 	// Get ga.Service, currently not exported
 	//service := reflect.ValueOf(app).Elem().FieldByName("service").Interface().(*ga.Service)
-	service := app.GetService()
 
 	// Instantiate devices to consume power
 	for i, cons := range configuration.Consumers {
 		switch cons.Type {
 		case "binary":
 			router.Devices[i] = &BinaryDevice{
-				Service:  service,
+				App:      app,
 				Consumer: &cons,
 			}
 		case "linear":
 			router.Devices[i] = &LinearDevice{
-				Service:  service,
+				App:      app,
 				Consumer: &cons,
 			}
 		default:
 			panic("Device " + cons.Name + " has unknown type: " + cons.Type)
 		}
+
+		router.Devices[i].Setup()
 	}
 
 	router.SmartMeter = &SmartMeter{

@@ -41,8 +41,8 @@ func (r *Router) rebalance(watts int) {
 			// then we should add the missing charge power to current grid power, because we prefer storing into battery
 			// over "wasting" it on idle load.
 			// Also, we should not use the battery charge to power our idle load.
-			if r.Battery.ChargePct < 99 && r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
-				watts += r.Battery.Config.MaxChargingPower - r.Battery.CurrentPower
+			if r.Battery.ChargePct < 99 && -r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
+				watts += r.Battery.Config.MaxChargingPower + r.Battery.CurrentPower
 			}
 		}
 

@@ -40,6 +40,9 @@ type BatteryConfig struct {
 
 	// Max power in watts that the battery can absorb unless fully charged
 	MaxChargingPower int `yaml:"maxChargingPower"`
+
+	// Until what % of battery charge should the battery be expected to accept MaxChargingPower, e.g. 94
+	FullChargePct int `yaml:"fullChargePct"`
 }
 
 type Consumer struct {

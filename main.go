@@ -57,9 +57,6 @@ func runApp() {
 		Devices: make([]Device, len(configuration.Consumers)),
 	}
 
-	// Get ga.Service, currently not exported
-	//service := reflect.ValueOf(app).Elem().FieldByName("service").Interface().(*ga.Service)
-
 	// Instantiate devices to consume power
 	for i, cons := range configuration.Consumers {
 		switch cons.Type {

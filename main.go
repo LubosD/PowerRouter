@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 	ga "saml.dev/gome-assistant"
@@ -23,13 +24,32 @@ func main() {
 		log.Fatalln("Error loading config:", err)
 	}
 
+	for {
+		runApp()
+
+		log.Println("Will restart in 5 seconds...")
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func runApp() {
 	// HASS setup
-	app := ga.NewApp(ga.NewAppRequest{
+	app, err := ga.NewApp(ga.NewAppRequest{
 		IpAddress:        configuration.Hass.Address,
 		Port:             strconv.Itoa(configuration.Hass.Port),
 		HAAuthToken:      configuration.Hass.Token,
 		HomeZoneEntityId: configuration.Hass.Zone,
 	})
+
+	if err != nil {
+		if errors.Is(err, ga.ErrInvalidToken) {
+			log.Fatalln("Invalid HASS authentication token!")
+		} else {
+			log.Println("Error connecting to HASS:", err)
+			return
+		}
+	}
+
 	defer app.Cleanup()
 
 	// Power router setup

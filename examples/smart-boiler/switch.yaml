@@ -1,0 +1,10 @@
+...
+switch:
+  - platform: template
+    switches:
+      smartboiler_pv_override:
+        friendly_name: "PV override for Smart Boiler"
+        unique_id: smartboiler_pv_override
+        turn_on: []
+        turn_off: []
+...

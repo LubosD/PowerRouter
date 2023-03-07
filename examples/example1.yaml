@@ -1,0 +1,35 @@
+hass:
+  # Where is your HASS instance?
+  address: "127.0.0.1"
+  port: 8123
+  # Create a persistent HASS token and put it here
+  token: "PutYourHassTokenHere"
+  zone: zone.home
+smartmeterEntities:
+  # One or more power (W) entities.
+  - sensor.power_phase1
+  - sensor.power_phase2
+  - sensor.power_phase3
+# Use if you have a battery and want to give priority to it
+battery:
+  pctEntity: sensor.battery_capacity_pct
+  powerEntity: sensor.battery_power
+  maxChargingPower: 2300
+  # If your battery cannot accept full charging power at the end of the charge, set this accordingly
+  fullChargePct: 94
+consumers:
+  # First priority, an SSR-controlled boiler
+  - name: Dumb boiler
+    entity: number.boiler_power_pv_override
+    type: linear
+    power: 2300
+    delaySeconds: 3
+    minPower: 100
+  # Second priority, a smart boiler than can be turned on and off
+  - name: Smart boiler
+    entity: switch.smartboiler_pv_override
+    type: binary
+    power: 2300
+    delaySeconds: 3
+    # Better buy 200W than sell 2300-200=2100W
+    allowBuyPower: 200

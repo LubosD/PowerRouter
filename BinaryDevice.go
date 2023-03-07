@@ -26,6 +26,7 @@ func (d *BinaryDevice) Setup() {
 		NewEntityListener().
 		EntityIds(d.Consumer.Entity).
 		Call(d.handleValue).
+		RunOnStartup().
 		Build()
 
 	d.App.RegisterEntityListeners(listener)
@@ -34,8 +35,12 @@ func (d *BinaryDevice) Setup() {
 func (d *BinaryDevice) handleValue(service *ga.Service, state *ga.State, sensor ga.EntityData) {
 	switch sensor.ToState {
 	case "0":
+		fallthrough
+	case "off":
 		d.state = false
 	case "1":
+		fallthrough
+	case "on":
 		d.state = true
 	default:
 		value, err := strconv.ParseBool(sensor.ToState)

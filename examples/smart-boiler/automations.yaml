@@ -1,0 +1,37 @@
+- id: smartboiler_pv_override_on
+  alias: SmartBoiler PV override on
+  trigger:
+  - platform: state
+    entity_id: switch.smartboiler_pv_override
+    from: 'off'
+    to: 'on'
+  action:
+  - service: scene.create
+    data:
+      scene_id: smartboiler_before
+      snapshot_entities:
+      - select.mode
+      - climate.thermostat
+  - service: climate.set_temperature
+    target:
+      entity_id: climate.thermostat
+      device_id: 03bd5392dc3c9936635a75fcf562bb41
+    data:
+      temperature: 74
+  - service: select.select_option
+    target:
+      device_id: 03bd5392dc3c9936635a75fcf562bb41
+      entity_id: select.mode
+    data:
+      option: NORMAL
+- id: smartboiler_pv_override_off
+  alias: SmartBoiler PV override off
+  trigger:
+  - platform: state
+    entity_id: switch.smartboiler_pv_override
+    from: 'on'
+    to: 'off'
+  action:
+  - service: scene.turn_on
+    target:
+      entity_id: scene.smartboiler_before

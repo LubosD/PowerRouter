@@ -1,0 +1,173 @@
+esphome:
+  name: dumbboiler
+  on_boot:
+    then:
+      - switch.turn_on: auto_heater_allowed
+      - script.execute: control_loop
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: "xxxxxxxxxxxxx"
+  reboot_timeout: 0s
+
+mqtt:
+  broker: 10.10.10.3
+
+ota:
+  password: "xxxxxxxxxxxxxxxxxxx"
+
+wifi:
+  ssid: "xxxxxxxxxxxxx"
+  password: "xxxxxxxxxxxxx"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Dumbboiler Fallback Hotspot"
+    password: "xxxxxxxxxxxxx"
+
+captive_portal:
+    
+output:
+  - platform: ledc
+    pin: GPIO16
+    id: boiler_pwm
+    frequency: 1000Hz
+
+number:
+  - platform: template
+    id: boiler_power
+    name: "Boiler power raw PWM" # Directly sets the PWM value
+    min_value: 0
+    max_value: 1
+    step: 0.01
+    optimistic: true
+    on_value:
+      then:
+        - lambda: |-
+            auto pwm = id(boiler_pwm);
+
+            // PWM -> VDC component correction - may not work for you
+            // Empirically determined for a component that I bought from AliExpress
+            auto y = 0.146*x*x + 0.833121*x - 0.019282;
+            
+            if (y < 0)
+              y = 0;
+            else if (y > 1)
+              y = 1;
+            else {
+              // https://electronics.stackexchange.com/questions/414370/calculate-angle-for-triac-phase-control
+              // 0-10VDC appears to correspond to 0-pi rad angle
+              
+              const double angle_lut[101] ={
+                0.00000, 0.02478, 0.03936, 0.05161, 0.06258, 0.07268,
+                0.08215, 0.09114, 0.09973, 0.10800, 0.11600, 0.12376,
+                0.13132, 0.13870, 0.14592, 0.15300, 0.15996, 0.16680,
+                0.17354, 0.18019, 0.18675, 0.19324, 0.19966, 0.20602,
+                0.21231, 0.21856, 0.22476, 0.23091, 0.23703, 0.24311,
+                0.24915, 0.25517, 0.26116, 0.26713, 0.27308, 0.27902,
+                0.28494, 0.29084, 0.29674, 0.30263, 0.30852, 0.31440,
+                0.32028, 0.32617, 0.33206, 0.33796, 0.34387, 0.34979,
+                0.35572, 0.36166, 0.36763, 0.37361, 0.37962, 0.38566,
+                0.39172, 0.39781, 0.40394, 0.41010, 0.41630, 0.42254,
+                0.42883, 0.43516, 0.44155, 0.44799, 0.45449, 0.46106,
+                0.46769, 0.47439, 0.48118, 0.48804, 0.49500, 0.50205,
+                0.50920, 0.51647, 0.52384, 0.53135, 0.53899, 0.54679,
+                0.55474, 0.56286, 0.57117, 0.57969, 0.58844, 0.59744,
+                0.60671, 0.61629, 0.62621, 0.63652, 0.64727, 0.65852,
+                0.67036, 0.68289, 0.69624, 0.71060, 0.72622, 0.74348,
+                0.76297, 0.78574, 0.81390, 0.85332, 1.00000};
+
+              y = 1.0 - angle_lut[100 - int(round(y * 100))];
+            }
+
+            pwm->write_state(y);
+  - platform: template
+    id: boiler_pv_power
+    name: "Boiler power PV override" # To be called from HA to use excess PV power
+    min_value: 0
+    max_value: 1
+    step: 0.01
+    optimistic: true
+    on_value:
+      then:
+        - script.execute: control_loop
+
+dallas:
+  - pin: GPIO17
+
+sensor:
+  - platform: dallas
+    address: 0x1701143306944228 # Replace with your Dallas sensor's address
+    name: "Boiler Temperature"
+    id: boiler_temperature_sensor
+
+climate:
+  - platform: thermostat
+    name: "Big Boiler"
+    sensor: boiler_temperature_sensor
+    min_heating_off_time: 300s
+    min_heating_run_time: 300s
+    min_idle_time: 30s
+    heat_deadband: 5 °C
+    heat_action:
+      - switch.turn_on: auto_heater
+    idle_action:
+      - switch.turn_off: auto_heater
+    default_preset: Base
+    visual:
+      max_temperature: 80 °C
+      temperature_step: 1.0 °C
+    preset:
+      - name: Base
+        default_target_temperature_low: 55 °C
+        mode: heat
+
+switch:
+  - platform: template
+    name: "Boiler auto-heating switch" # Controlled by thermostat
+    id: auto_heater
+    optimistic: true
+    on_turn_on:
+      - then:
+        - script.execute: control_loop
+    on_turn_off:
+      - then:
+        - script.execute: control_loop
+  - platform: template
+    name: "Boiler auto-heating allowed" # Controlled by HDO / spot prices etc.
+    id: auto_heater_allowed
+    optimistic: true
+    on_turn_on:
+      - then:
+        - script.execute: control_loop
+    on_turn_off:
+      - then:
+        - script.execute: control_loop
+
+script:
+  - id: control_loop
+    mode: queued
+    then:
+      - lambda: |-
+          // Always push the boiler_pv_power value to the boiler.
+          // If the climate control indicates heating should be on, then always push 1.0 (100%) to the boiler.
+          auto pv_power = id(boiler_pv_power).state;
+          auto power = pv_power;
+
+          if (id(auto_heater_allowed).state && id(auto_heater).state)
+            power = 1;
+
+          ESP_LOGD("BoilerControl", "PV power: %f, auto allowed: %d, auto on: %d -> %f", pv_power, id(auto_heater_allowed).state, id(auto_heater).state, power);
+
+          auto call = id(boiler_power).make_call();
+          call.set_value(power);
+          call.perform();
+

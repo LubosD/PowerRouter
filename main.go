@@ -65,10 +65,12 @@ func main() {
 	}
 	router.SmartMeter.Setup(app)
 
-	router.Battery = &Battery{
-		Config: &configuration.Battery,
+	if configuration.Battery != nil {
+		router.Battery = &Battery{
+			Config: configuration.Battery,
+		}
+		router.Battery.Setup(app)
 	}
-	router.Battery.Setup(app)
 
 	// Initialize the router
 	router.Setup()

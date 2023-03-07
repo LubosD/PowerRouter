@@ -43,6 +43,10 @@ func (r *Router) rebalance(watts int) {
 		if r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct && -r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
 			// Adjust our import power with how many watts could theoretically go into the battery instead
 			adj := r.Battery.Config.MaxChargingPower + r.Battery.CurrentPower
+
+			// Adjust gradually to avoid going back and forth all the time
+			adj /= 2
+
 			watts += adj
 			didBatteryAdj = true
 
@@ -50,10 +54,16 @@ func (r *Router) rebalance(watts int) {
 		} else if r.Battery.CurrentPower > BATTERY_ZERO_POWER {
 			// Also, we should not use the battery charge to power our idle load.
 			// Adjust our import power with how much the battery provides. This ensures we kill any optional devices.
-			watts += r.Battery.CurrentPower
+
+			adj := r.Battery.CurrentPower
+
+			// Adjust gradually to avoid going back and forth all the time
+			adj /= 2
+
+			watts += adj
 			didBatteryAdj = true
 
-			log.Printf("Battery is feeding into the load, adjusting balance by %dW to %dW\n", r.Battery.CurrentPower, watts)
+			log.Printf("Battery is feeding into the load, adjusting balance by %dW to %dW\n", adj, watts)
 		}
 	}
 

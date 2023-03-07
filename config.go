@@ -11,7 +11,7 @@ type Config struct {
 	// The system gives max priority to the battery.
 	// If the battery isn't fully charged and isn't absorbing its full charging power,
 	// then some of the controlled consumers may be turned off.
-	Battery BatteryConfig `yaml:"battery"`
+	Battery *BatteryConfig `yaml:"battery"`
 
 	// Devices to automatically control, with decreasing priority
 	Consumers []Consumer `yaml:"consumers"`

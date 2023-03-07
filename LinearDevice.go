@@ -23,6 +23,7 @@ func (d *LinearDevice) Setup() {
 		NewEntityListener().
 		EntityIds(d.Consumer.Entity).
 		Call(d.handleValue).
+		RunOnStartup().
 		Build()
 
 	d.App.RegisterEntityListeners(listener)

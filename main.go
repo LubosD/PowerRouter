@@ -58,17 +58,19 @@ func runApp() {
 	}
 
 	// Instantiate devices to consume power
-	for i, cons := range configuration.Consumers {
+	for i := range configuration.Consumers {
+		cons := &configuration.Consumers[i]
+
 		switch cons.Type {
 		case "binary":
 			router.Devices[i] = &BinaryDevice{
 				App:      app,
-				Consumer: &cons,
+				Consumer: cons,
 			}
 		case "linear":
 			router.Devices[i] = &LinearDevice{
 				App:      app,
-				Consumer: &cons,
+				Consumer: cons,
 			}
 		default:
 			panic("Device " + cons.Name + " has unknown type: " + cons.Type)

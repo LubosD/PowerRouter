@@ -79,10 +79,17 @@ func runApp() {
 		router.Devices[i].Setup()
 	}
 
+	if configuration.ExportDisabledEntity != "" && configuration.ExportDisabledEntity != "off" {
+		router.ExportSimulator = &ExportSimulator{
+			ExportDisabledInverterModeEntity: configuration.ExportDisabledEntity,
+		}
+	}
+
 	router.SmartMeter = &SmartMeter{
 		Entities: configuration.SmartmeterEntities,
 	}
 	router.SmartMeter.Setup(app)
+	router.GlobalEnableEntity = configuration.GlobalEnableEntity
 
 	if configuration.Battery != nil {
 		router.Battery = &Battery{
@@ -92,7 +99,7 @@ func runApp() {
 	}
 
 	// Initialize the router
-	router.Setup()
+	router.Setup(app)
 
 	app.Start()
 }

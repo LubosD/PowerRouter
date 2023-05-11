@@ -3,25 +3,61 @@ package main
 import (
 	"log"
 	"time"
+
+	ga "saml.dev/gome-assistant"
 )
 
 // This many watts and less is considered to be zero
 const BATTERY_ZERO_POWER = 10
 
 type Router struct {
-	SmartMeter *SmartMeter
-	Battery    *Battery
-	Devices    []Device
+	SmartMeter         *SmartMeter
+	Battery            *Battery
+	Devices            []Device
+	ExportSimulator    *ExportSimulator
+	GlobalEnableEntity string
 
 	noActionUntil              time.Time
 	waitForNewBatteryDataAfter *time.Time
+	disabled                   bool
 }
 
-func (r *Router) Setup() {
+func (r *Router) Setup(gaApp *ga.App) {
 	r.SmartMeter.OnGridPower = r.rebalance
+
+	if r.GlobalEnableEntity != "" {
+		listener := ga.
+			NewEntityListener().
+			EntityIds(r.GlobalEnableEntity).
+			Call(r.handleGlobalEnable).
+			RunOnStartup().
+			Build()
+
+		gaApp.RegisterEntityListeners(listener)
+	}
+}
+
+func (r *Router) handleGlobalEnable(service *ga.Service, state *ga.State, sensor ga.EntityData) {
+	if sensor.ToState == "off" {
+		r.disabled = true
+		r.turnAllOff()
+	} else if sensor.ToState == "on" {
+		r.disabled = false
+	}
+}
+
+func (r *Router) turnAllOff() {
+	for _, device := range r.Devices {
+		if power := device.CurrentPower(); power > 0 {
+			device.TrySavePower(power)
+		}
+	}
 }
 
 func (r *Router) rebalance(watts int) {
+	if r.disabled {
+		return
+	}
 	if r.noActionUntil.After(time.Now()) {
 		return
 	}
@@ -32,6 +68,10 @@ func (r *Router) rebalance(watts int) {
 			return
 		}
 		r.waitForNewBatteryDataAfter = nil
+	}
+
+	if r.ExportSimulator != nil {
+		watts = r.ExportSimulator.Process(watts)
 	}
 
 	didBatteryAdj := false
@@ -80,6 +120,11 @@ func (r *Router) rebalance(watts int) {
 				adjustedConsumption = true
 				break
 			}
+		}
+
+		if r.ExportSimulator != nil && !adjustedConsumption {
+			// Inform the simulator that this value didn't have any effect
+			r.ExportSimulator.UndistributedPower(watts)
 		}
 	} else {
 		// We're buying power from the grid, let's see if we should maybe turn something off

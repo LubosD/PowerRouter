@@ -19,4 +19,8 @@ type Device interface {
 
 	// After successfully calling TryConsumePower/TrySavePower on this device, wait this many seconds before taking further actions.
 	DelaySeconds() int
+
+	// How much power is currently routed to this device.
+	// Doesn't need to be a real value, but should probably reflect previous successful TryConsumePower/TrySavePower calls.
+	CurrentPower() int
 }

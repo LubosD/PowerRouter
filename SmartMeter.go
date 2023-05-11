@@ -21,6 +21,7 @@ func (sm *SmartMeter) Setup(gaApp *ga.App) {
 		NewEntityListener().
 		EntityIds(sm.Entities...).
 		Call(sm.handleValues).
+		RunOnStartup().
 		Build()
 
 	gaApp.RegisterEntityListeners(listener)
@@ -49,6 +50,7 @@ func (sm *SmartMeter) handleValues(service *ga.Service, state *ga.State, sensor 
 	for _, v := range sm.lastValues {
 		if v == nil {
 			// We don't have data from all sensors yet
+			log.Println("SmartMeter: Don't have values for all phases yet")
 			return
 		}
 		powerBalance += *v
@@ -58,10 +60,5 @@ func (sm *SmartMeter) handleValues(service *ga.Service, state *ga.State, sensor 
 
 	if sm.OnGridPower != nil {
 		sm.OnGridPower(int(powerBalance))
-	}
-
-	// Reset all data, wait for new events to fill it again
-	for i := range sm.lastValues {
-		sm.lastValues[i] = nil
 	}
 }

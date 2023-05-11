@@ -5,6 +5,10 @@ type Config struct {
 	// HomeAssistant connection params
 	Hass HassConfig `yaml:"hass"`
 
+	// If set, then this entity can be used to enable / disable the entire power router.
+	// When turned off, the router will turn all devices off.
+	GlobalEnableEntity string `yaml:"globalEnableEntity"`
+
 	// One entity per phase, providing watts. Negative means power going into the grid.
 	SmartmeterEntities []string `yaml:"smartmeterEntities"`
 
@@ -15,6 +19,14 @@ type Config struct {
 
 	// Devices to automatically control, with decreasing priority
 	Consumers []Consumer `yaml:"consumers"`
+
+	// If exporting to grid is permanently disabled on your inverter, set this to "on"
+	// If exporting to gird is dynamically disabled on your inverter (e.g. when spot price is too low),
+	// set this to the entity indicating that situation (expects entity value to be "on" when exports are disabled).
+	//
+	// This feature activates opportunistic power balance handling, where the code internally simulates
+	// excess power and then checks if the inverter actually produced additional power to cover that demand.
+	ExportDisabledEntity string `yaml:"exportDisabledEntity"`
 }
 
 type HassConfig struct {

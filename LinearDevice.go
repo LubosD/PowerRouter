@@ -67,13 +67,13 @@ func (d *LinearDevice) setPower(watts int) {
 	}
 }
 
-func (d *LinearDevice) getPower() int {
+func (d *LinearDevice) CurrentPower() int {
 	return int(d.state * float32(d.Consumer.Power))
 }
 
 func (d *LinearDevice) TryConsumePower(watts int) bool {
-	if d.state < 1.0 && d.getPower()+watts > d.Consumer.MinPower {
-		d.setPower(d.getPower() + watts)
+	if d.state < 1.0 && d.CurrentPower()+watts > d.Consumer.MinPower {
+		d.setPower(d.CurrentPower() + watts)
 		return true
 	}
 	return false
@@ -81,7 +81,7 @@ func (d *LinearDevice) TryConsumePower(watts int) bool {
 
 func (d *LinearDevice) TrySavePower(watts int) bool {
 	if d.state > 0 {
-		d.setPower(d.getPower() - watts)
+		d.setPower(d.CurrentPower() - watts)
 		return true
 	} else {
 		// log.Printf("Cannot save %d watts, I can only do %d W\n", watts, int(d.state*float32(d.Consumer.Power)))

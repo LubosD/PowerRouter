@@ -32,6 +32,13 @@ func (d *BinaryDevice) Setup() {
 	d.App.RegisterEntityListeners(listener)
 }
 
+func (d *BinaryDevice) CurrentPower() int {
+	if d.state {
+		return d.Consumer.Power
+	}
+	return 0
+}
+
 func (d *BinaryDevice) handleValue(service *ga.Service, state *ga.State, sensor ga.EntityData) {
 	switch sensor.ToState {
 	case "0":

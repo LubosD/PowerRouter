@@ -79,10 +79,13 @@ func runApp() {
 		router.Devices[i].Setup()
 	}
 
-	if configuration.ExportDisabledEntity != "" && configuration.ExportDisabledEntity != "off" {
+	if configuration.ExportEnabledEntity != "" && configuration.ExportEnabledEntity != "on" {
 		router.ExportSimulator = &ExportSimulator{
-			ExportDisabledInverterModeEntity: configuration.ExportDisabledEntity,
+			ExportEnabledInverterModeEntity: configuration.ExportEnabledEntity,
 		}
+		router.ExportSimulator.Setup(app)
+	} else {
+		log.Println("Not configuring ExportSimulator")
 	}
 
 	router.SmartMeter = &SmartMeter{

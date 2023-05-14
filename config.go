@@ -20,13 +20,14 @@ type Config struct {
 	// Devices to automatically control, with decreasing priority
 	Consumers []Consumer `yaml:"consumers"`
 
-	// If exporting to grid is permanently disabled on your inverter, set this to "on"
+	// When not specified, exports are considered to be enabled.
+	// If exporting to grid is permanently disabled on your inverter, set this to "off"
 	// If exporting to gird is dynamically disabled on your inverter (e.g. when spot price is too low),
-	// set this to the entity indicating that situation (expects entity value to be "on" when exports are disabled).
+	// set this to the entity indicating that situation (expects entity value to be "off" when exports are disabled).
 	//
 	// This feature activates opportunistic power balance handling, where the code internally simulates
 	// excess power and then checks if the inverter actually produced additional power to cover that demand.
-	ExportDisabledEntity string `yaml:"exportDisabledEntity"`
+	ExportEnabledEntity string `yaml:"exportEnabledEntity"`
 }
 
 type HassConfig struct {

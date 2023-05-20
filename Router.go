@@ -70,10 +70,6 @@ func (r *Router) rebalance(watts int) {
 		r.waitForNewBatteryDataAfter = nil
 	}
 
-	if r.ExportSimulator != nil {
-		watts = r.ExportSimulator.Process(watts)
-	}
-
 	didBatteryAdj := false
 
 	if r.Battery != nil {
@@ -107,6 +103,10 @@ func (r *Router) rebalance(watts int) {
 		}
 	}
 
+	if r.ExportSimulator != nil {
+		watts = r.ExportSimulator.Process(watts)
+	}
+
 	adjustedConsumption := false
 	if watts < 0 {
 		// We have excess power going into the grid, let's look for something to turn on
@@ -122,11 +122,15 @@ func (r *Router) rebalance(watts int) {
 			}
 		}
 
-		if r.ExportSimulator != nil && !adjustedConsumption {
-			// Inform the simulator that this value didn't have any effect
-			r.ExportSimulator.UndistributedPower(watts)
+		if r.ExportSimulator != nil {
+			if !adjustedConsumption {
+				// Inform the simulator that this value didn't have any effect
+				r.ExportSimulator.UndistributedPower(watts)
+			} else {
+				r.ExportSimulator.DistributedPower(watts)
+			}
 		}
-	} else {
+	} else if watts > 0 {
 		// We're buying power from the grid, let's see if we should maybe turn something off
 
 		for i := len(r.Devices) - 1; i >= 0; i-- {

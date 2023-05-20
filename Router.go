@@ -87,7 +87,7 @@ func (r *Router) rebalance(watts int) {
 			didBatteryAdj = true
 
 			log.Printf("Battery charge is only %d%%, adjusting balance by %dW to %dW\n", r.Battery.ChargePct, adj, watts)
-		} else if r.Battery.CurrentPower > BATTERY_ZERO_POWER {
+		} else if r.Battery.CurrentPower > BATTERY_ZERO_POWER && r.Battery.ChargePct < 99 {
 			// Also, we should not use the battery charge to power our idle load.
 			// Adjust our import power with how much the battery provides. This ensures we kill any optional devices.
 

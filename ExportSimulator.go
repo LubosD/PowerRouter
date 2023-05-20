@@ -21,7 +21,7 @@ type ExportSimulator struct {
 
 const OPPORTUNISTIC_RETRY_INTERVAL = time.Minute * 2
 const OPPORTUNISTIC_ZERO_POWER = 50
-const OPPORTUNISTIC_STEP = 200 // watts
+const OPPORTUNISTIC_STEP = 1000 // watts
 
 // Inverters can be incredibly slow when exporting power is forbidden
 // Even slower when battery SoC is 99-100%.
@@ -56,7 +56,7 @@ func (es *ExportSimulator) Process(realMeasurement int) int {
 		return 0
 	}
 
-	if es.exportDisabled && realMeasurement > 0 {
+	if es.exportDisabled && realMeasurement > -OPPORTUNISTIC_ZERO_POWER {
 		if realMeasurement < OPPORTUNISTIC_ZERO_POWER {
 			if time.Since(es.blockedSince) > OPPORTUNISTIC_RETRY_INTERVAL {
 				// Simulate an ongoing export
@@ -81,7 +81,7 @@ func (es *ExportSimulator) Process(realMeasurement int) int {
 
 func (es *ExportSimulator) UndistributedPower(watts int) {
 	if es.exportDisabled {
-		log.Printf("ExportSimulator: simulated %dW were not distributed", watts)
+		log.Printf("ExportSimulator: simulated(?) %dW were not distributed", watts)
 		es.accumulatedValue = watts
 	}
 }

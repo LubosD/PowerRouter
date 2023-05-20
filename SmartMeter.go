@@ -3,20 +3,25 @@ package main
 import (
 	"log"
 	"strconv"
+	"time"
 
 	"golang.org/x/exp/slices"
 	ga "saml.dev/gome-assistant"
 )
+
+const maxDuration time.Duration = 1<<63 - 1
 
 type SmartMeter struct {
 	Entities []string
 
 	OnGridPower func(watts int)
 
-	lastValues []*float32
+	lastValues     []*float32
+	reportingTimer *time.Timer
 }
 
 func (sm *SmartMeter) Setup(gaApp *ga.App) {
+	sm.reportingTimer = time.AfterFunc(maxDuration, sm.reportValues)
 	listener := ga.
 		NewEntityListener().
 		EntityIds(sm.Entities...).
@@ -46,6 +51,10 @@ func (sm *SmartMeter) handleValues(service *ga.Service, state *ga.State, sensor 
 	f32 := float32(value)
 	sm.lastValues[phaseIndex] = &f32
 
+	sm.reportingTimer.Reset(250 * time.Millisecond)
+}
+
+func (sm *SmartMeter) reportValues() {
 	var powerBalance float32
 	for _, v := range sm.lastValues {
 		if v == nil {

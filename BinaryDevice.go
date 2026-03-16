@@ -39,7 +39,7 @@ func (d *BinaryDevice) CurrentPower() int {
 	return 0
 }
 
-func (d *BinaryDevice) handleValue(service *ga.Service, state *ga.State, sensor ga.EntityData) {
+func (d *BinaryDevice) handleValue(service *ga.Service, state ga.State, sensor ga.EntityData) {
 	switch sensor.ToState {
 	case "0":
 		fallthrough

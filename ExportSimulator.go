@@ -20,7 +20,7 @@ type ExportSimulator struct {
 }
 
 const OPPORTUNISTIC_RETRY_INTERVAL = time.Minute * 2
-const OPPORTUNISTIC_ZERO_POWER = 50
+const OPPORTUNISTIC_ZERO_POWER = 100
 const OPPORTUNISTIC_STEP = 1000 // watts
 
 // Inverters can be incredibly slow when exporting power is forbidden
@@ -37,7 +37,7 @@ func (es *ExportSimulator) Setup(gaApp *ga.App) {
 			listener2 := ga.
 				NewEntityListener().
 				EntityIds(es.ExportEnabledInverterModeEntity).
-				Call(func(s1 *ga.Service, s2 *ga.State, ed ga.EntityData) {
+				Call(func(s1 *ga.Service, s2 ga.State, ed ga.EntityData) {
 					es.exportDisabled = strings.ToLower(ed.ToState) == "off"
 					log.Println("ExportSimulator: exports state now " + ed.ToState)
 				}).
@@ -66,6 +66,7 @@ func (es *ExportSimulator) Process(realMeasurement int) int {
 
 				now := time.Now()
 				es.lastStepUp = &now
+				es.accumulatedValue = 0
 
 				return simValue
 			}
@@ -83,6 +84,7 @@ func (es *ExportSimulator) UndistributedPower(watts int) {
 	if es.exportDisabled {
 		log.Printf("ExportSimulator: simulated(?) %dW were not distributed", watts)
 		es.accumulatedValue = watts
+		es.blockedSince = time.Time{}
 	}
 }
 

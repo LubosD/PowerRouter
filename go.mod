@@ -1,11 +1,11 @@
 module github.com/LubosD/PowerRouter
 
-go 1.20
+go 1.21
 
 require (
 	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd
 	gopkg.in/yaml.v3 v3.0.1
-	saml.dev/gome-assistant v0.1.30
+	saml.dev/gome-assistant v0.7.0
 )
 
 require (

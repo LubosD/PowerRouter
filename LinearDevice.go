@@ -29,7 +29,7 @@ func (d *LinearDevice) Setup() {
 	d.App.RegisterEntityListeners(listener)
 }
 
-func (d *LinearDevice) handleValue(service *ga.Service, state *ga.State, sensor ga.EntityData) {
+func (d *LinearDevice) handleValue(service *ga.Service, state ga.State, sensor ga.EntityData) {
 	value, err := strconv.ParseFloat(sensor.ToState, 32)
 	if err == nil {
 		log.Printf("Received new value of entity [%s]: %s", sensor.TriggerEntityId, sensor.ToState)
@@ -61,6 +61,7 @@ func (d *LinearDevice) setPower(watts int) {
 
 	switch entityType {
 	case "number":
+		log.Println("SetValue ", d.Consumer.Entity, " to ", d.state)
 		service.Number.SetValue(d.Consumer.Entity, d.state)
 	default:
 		log.Println("Don't know how to set power of entity type " + entityType)

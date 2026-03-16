@@ -37,7 +37,7 @@ func (r *Router) Setup(gaApp *ga.App) {
 	}
 }
 
-func (r *Router) handleGlobalEnable(service *ga.Service, state *ga.State, sensor ga.EntityData) {
+func (r *Router) handleGlobalEnable(service *ga.Service, state ga.State, sensor ga.EntityData) {
 	if sensor.ToState == "off" {
 		r.disabled = true
 		r.turnAllOff()
@@ -76,7 +76,7 @@ func (r *Router) rebalance(watts int) {
 		// If we have a battery, the battery isn't fully charged and isn't charging at full power,
 		// then we should add the missing charge power to current grid power, because we prefer storing into battery
 		// over "wasting" it on idle load.
-		if r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct && -r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
+		if !r.Battery.LoadFirst && r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct && -r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
 			// Adjust our import power with how many watts could theoretically go into the battery instead
 			adj := r.Battery.Config.MaxChargingPower + r.Battery.CurrentPower
 
@@ -87,7 +87,14 @@ func (r *Router) rebalance(watts int) {
 			didBatteryAdj = true
 
 			log.Printf("Battery charge is only %d%%, adjusting balance by %dW to %dW\n", r.Battery.ChargePct, adj, watts)
-		} else if r.Battery.CurrentPower > BATTERY_ZERO_POWER && r.Battery.ChargePct < 99 {
+		} else if r.Battery.LoadFirst && -r.Battery.CurrentPower > BATTERY_ZERO_POWER {
+			log.Printf("Load first and the battery is charging at %dW - increasing load", -r.Battery.CurrentPower)
+
+			adj := r.Battery.CurrentPower / 2
+
+			watts += adj
+			didBatteryAdj = true
+		} else if r.Battery.CurrentPower > BATTERY_ZERO_POWER && r.Battery.ChargePct < 100 {
 			// Also, we should not use the battery charge to power our idle load.
 			// Adjust our import power with how much the battery provides. This ensures we kill any optional devices.
 

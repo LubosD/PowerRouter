@@ -18,6 +18,8 @@ type Battery struct {
 	CurrentPower int
 
 	LastDataAt time.Time
+
+	LoadFirst bool
 }
 
 func (b *Battery) Setup(gaApp *ga.App) {
@@ -36,10 +38,20 @@ func (b *Battery) Setup(gaApp *ga.App) {
 		Call(b.handlePower).
 		Build()
 
+	if b.Config.LoadFirstEntity != "" {
+		listenerLoadFirst := ga.
+			NewEntityListener().
+			EntityIds(b.Config.LoadFirstEntity).
+			Call(b.handleLoadFirst).
+			RunOnStartup().
+			Build()
+		gaApp.RegisterEntityListeners(listenerLoadFirst)
+	}
+
 	gaApp.RegisterEntityListeners(listenerPct, listenerPower)
 }
 
-func (b *Battery) handlePct(service *ga.Service, state *ga.State, sensor ga.EntityData) {
+func (b *Battery) handlePct(service *ga.Service, state ga.State, sensor ga.EntityData) {
 	val, err := strconv.ParseFloat(sensor.ToState, 32)
 	if err != nil {
 		log.Printf("Cannot parse battery SOC value (%s): %v\n", sensor.ToState, err)
@@ -52,12 +64,20 @@ func (b *Battery) handlePct(service *ga.Service, state *ga.State, sensor ga.Enti
 	}
 }
 
-func (b *Battery) handlePower(service *ga.Service, state *ga.State, sensor ga.EntityData) {
+func (b *Battery) handlePower(service *ga.Service, state ga.State, sensor ga.EntityData) {
 	val, err := strconv.ParseFloat(sensor.ToState, 32)
 	if err != nil {
 		log.Printf("Cannot parse battery power value (%s): %v\n", sensor.ToState, err)
 	} else {
 		b.CurrentPower = int(val)
 		b.LastDataAt = sensor.LastChanged
+	}
+}
+
+func (b *Battery) handleLoadFirst(service *ga.Service, state ga.State, sensor ga.EntityData) {
+	if sensor.ToState == "off" {
+		b.LoadFirst = false
+	} else if sensor.ToState == "on" {
+		b.LoadFirst = true
 	}
 }

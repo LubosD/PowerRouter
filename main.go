@@ -42,12 +42,8 @@ func runApp() {
 	})
 
 	if err != nil {
-		if errors.Is(err, ga.ErrInvalidToken) {
-			log.Fatalln("Invalid HASS authentication token!")
-		} else {
-			log.Println("Error connecting to HASS:", err)
-			return
-		}
+		log.Println("Error connecting to HASS:", err)
+		return
 	}
 
 	defer app.Cleanup()

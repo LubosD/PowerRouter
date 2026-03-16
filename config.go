@@ -56,6 +56,10 @@ type BatteryConfig struct {
 
 	// Until what % of battery charge should the battery be expected to accept MaxChargingPower, e.g. 94
 	FullChargePct int `yaml:"fullChargePct"`
+
+	// If this entity is provided and is true, then the logic will be inverted and PowerRouter will
+	// prioritize configued devices over the battery.
+	LoadFirstEntity string `yaml:"loadFirstEntity"`
 }
 
 type Consumer struct {

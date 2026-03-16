@@ -18,10 +18,10 @@ type SmartMeter struct {
 
 	lastValues     []*float32
 	reportingTimer *time.Timer
+	timerPending   bool
 }
 
 func (sm *SmartMeter) Setup(gaApp *ga.App) {
-	sm.reportingTimer = time.AfterFunc(maxDuration, sm.reportValues)
 	listener := ga.
 		NewEntityListener().
 		EntityIds(sm.Entities...).
@@ -32,11 +32,8 @@ func (sm *SmartMeter) Setup(gaApp *ga.App) {
 	gaApp.RegisterEntityListeners(listener)
 }
 
-func (sm *SmartMeter) handleValues(service *ga.Service, state *ga.State, sensor ga.EntityData) {
-	if sm.lastValues == nil {
-		sm.lastValues = make([]*float32, len(sm.Entities))
-	}
-
+func (sm *SmartMeter) handleValues(service *ga.Service, state ga.State, sensor ga.EntityData) {
+	// log.Println("Received new smartmeter data:", sensor.TriggerEntityId, "=", sensor.ToState)
 	phaseIndex := slices.Index(sm.Entities, sensor.TriggerEntityId)
 	if phaseIndex == -1 {
 		panic("Received SM value change for unknown entity: " + sensor.TriggerEntityId)
@@ -49,9 +46,21 @@ func (sm *SmartMeter) handleValues(service *ga.Service, state *ga.State, sensor 
 	}
 
 	f32 := float32(value)
+
+	if sm.lastValues == nil {
+		sm.lastValues = make([]*float32, len(sm.Entities))
+	}
 	sm.lastValues[phaseIndex] = &f32
 
-	sm.reportingTimer.Reset(250 * time.Millisecond)
+	if !sm.timerPending {
+		sm.reportingTimer = time.AfterFunc(250*time.Millisecond, sm.onReportTimer)
+		sm.timerPending = true
+	}
+}
+
+func (sm *SmartMeter) onReportTimer() {
+	sm.timerPending = false
+	sm.reportValues()
 }
 
 func (sm *SmartMeter) reportValues() {

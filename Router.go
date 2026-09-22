@@ -16,6 +16,7 @@ type Router struct {
 	Devices            []Device
 	ExportSimulator    *ExportSimulator
 	GlobalEnableEntity string
+	MaximizeUsage      bool
 
 	noActionUntil              time.Time
 	waitForNewBatteryDataAfter *time.Time
@@ -118,14 +119,33 @@ func (r *Router) rebalance(watts int) {
 	if watts < 0 {
 		// We have excess power going into the grid, let's look for something to turn on
 
-		budgetWatts := -watts
-		for _, device := range r.Devices {
-			if device.TryConsumePower(budgetWatts) {
-				log.Printf("Increasing power consumption of [%s] with budget %d W\n", device.Name(), budgetWatts)
+		if r.MaximizeUsage {
+			budgetWatts := -watts
+			if r.Battery != nil && r.Battery.MinBatteryPower > 0 &&
+				r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct {
+				budgetWatts -= r.Battery.MinBatteryPower
+				log.Printf("Reserving %dW for battery (SoC %d%%), MaximizeUsage budget reduced to %dW\n",
+					r.Battery.MinBatteryPower, r.Battery.ChargePct, budgetWatts)
+			}
+			if budgetWatts > 0 {
+				adjusted, delaySecs := r.rebalanceMaximize(budgetWatts)
+				if adjusted {
+					r.noActionUntil = time.Now().Add(time.Second * time.Duration(delaySecs))
+					adjustedConsumption = true
+				}
+			}
+		}
 
-				r.noActionUntil = time.Now().Add(time.Second * time.Duration(device.DelaySeconds()))
-				adjustedConsumption = true
-				break
+		if !adjustedConsumption {
+			budgetWatts := -watts
+			for _, device := range r.Devices {
+				if device.TryConsumePower(budgetWatts) {
+					log.Printf("Increasing power consumption of [%s] with budget %d W\n", device.Name(), budgetWatts)
+
+					r.noActionUntil = time.Now().Add(time.Second * time.Duration(device.DelaySeconds()))
+					adjustedConsumption = true
+					break
+				}
 			}
 		}
 
@@ -160,4 +180,155 @@ func (r *Router) rebalance(watts int) {
 		lastDataAt := time.Now()
 		r.waitForNewBatteryDataAfter = &lastDataAt
 	}
+}
+
+// rebalanceMaximize finds the allocation of power across all devices that maximizes total consumption.
+// It enumerates all on/off combinations of flexible binary devices and greedily allocates remaining
+// budget to linear devices in priority order.
+// Returns whether any changes were made and the delay to apply.
+func (r *Router) rebalanceMaximize(budgetWatts int) (adjusted bool, delaySecs int) {
+	type flexBinary struct {
+		device *BinaryDevice
+		index  int
+	}
+	type flexLinear struct {
+		device *LinearDevice
+		index  int
+	}
+
+	var fixedCost int
+	var flexBinaries []flexBinary
+	var flexLinears []flexLinear
+
+	// Classify devices and compute total redistributable budget
+	totalBudget := budgetWatts
+	for i, dev := range r.Devices {
+		switch d := dev.(type) {
+		case *BinaryDevice:
+			if d.state && !d.turnOffAllowed() {
+				// Fixed: must stay on, subtract from budget
+				fixedCost += d.Consumer.Power
+			} else {
+				// Flexible: add current power back to budget
+				totalBudget += d.CurrentPower()
+				flexBinaries = append(flexBinaries, flexBinary{device: d, index: i})
+			}
+		case *LinearDevice:
+			// Add current power back to budget
+			totalBudget += d.CurrentPower()
+			flexLinears = append(flexLinears, flexLinear{device: d, index: i})
+		}
+	}
+
+	totalBudget -= fixedCost
+	if totalBudget <= 0 {
+		return false, 0
+	}
+
+	// Current total consumption across flexible devices
+	currentTotal := 0
+	for _, fb := range flexBinaries {
+		currentTotal += fb.device.CurrentPower()
+	}
+	for _, fl := range flexLinears {
+		currentTotal += fl.device.CurrentPower()
+	}
+
+	bestTotal := currentTotal
+	bestBinaryMask := -1
+	bestLinearAllocs := []int(nil)
+
+	numBinaries := len(flexBinaries)
+	numCombinations := 1 << numBinaries
+
+	for mask := 0; mask < numCombinations; mask++ {
+		// Calculate cost of binary devices in this combination
+		binaryCost := 0
+		for bit := 0; bit < numBinaries; bit++ {
+			if mask&(1<<bit) != 0 {
+				fb := flexBinaries[bit]
+				effectiveCost := fb.device.Consumer.Power - fb.device.Consumer.AllowBuyPower
+				binaryCost += effectiveCost
+			}
+		}
+
+		if binaryCost > totalBudget {
+			continue
+		}
+
+		// Remaining budget for linear devices
+		remaining := totalBudget - binaryCost
+
+		// Actual total power used by binary devices (not effective cost, real power)
+		totalUsed := 0
+		for bit := 0; bit < numBinaries; bit++ {
+			if mask&(1<<bit) != 0 {
+				totalUsed += flexBinaries[bit].device.Consumer.Power
+			}
+		}
+
+		// Greedily allocate remaining budget to linear devices in priority order
+		linearAllocs := make([]int, len(flexLinears))
+		for li, fl := range flexLinears {
+			if remaining <= 0 {
+				break
+			}
+			maxPower := fl.device.Consumer.Power
+			alloc := remaining
+			if alloc > maxPower {
+				alloc = maxPower
+			}
+			if alloc < fl.device.Consumer.MinPower {
+				alloc = 0
+			}
+			linearAllocs[li] = alloc
+			totalUsed += alloc
+			remaining -= alloc
+		}
+
+		if totalUsed > bestTotal {
+			bestTotal = totalUsed
+			bestBinaryMask = mask
+			bestLinearAllocs = linearAllocs
+		}
+	}
+
+	if bestBinaryMask < 0 || bestTotal <= currentTotal {
+		return false, 0
+	}
+
+	// Apply the best allocation
+	maxDelay := 0
+	changed := false
+
+	for bit := 0; bit < numBinaries; bit++ {
+		fb := flexBinaries[bit]
+		wantOn := bestBinaryMask&(1<<bit) != 0
+		if fb.device.state != wantOn {
+			log.Printf("MaximizeUsage: setting [%s] to %v\n", fb.device.Name(), wantOn)
+			fb.device.setPower(wantOn)
+			changed = true
+			if fb.device.Consumer.DelaySeconds > maxDelay {
+				maxDelay = fb.device.Consumer.DelaySeconds
+			}
+		}
+	}
+
+	for li, fl := range flexLinears {
+		newPower := bestLinearAllocs[li]
+		if newPower != fl.device.CurrentPower() {
+			log.Printf("MaximizeUsage: setting [%s] to %d W\n", fl.device.Name(), newPower)
+			fl.device.setPower(newPower)
+			changed = true
+			if fl.device.Consumer.DelaySeconds > maxDelay {
+				maxDelay = fl.device.Consumer.DelaySeconds
+			}
+		}
+	}
+
+	if changed {
+		log.Printf("MaximizeUsage: total consumption %d W -> %d W (budget %d W)\n", currentTotal, bestTotal, budgetWatts)
+	}
+
+	return changed, maxDelay
 }

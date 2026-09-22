@@ -20,6 +20,10 @@ type Config struct {
 	// Devices to automatically control, with decreasing priority
 	Consumers []Consumer `yaml:"consumers"`
 
+	// When enabled, the router will find the allocation that maximizes total power consumed
+	// across all devices, even if it means giving less power to higher-priority devices.
+	MaximizeUsage bool `yaml:"maximizeUsage"`
+
 	// When not specified, exports are considered to be enabled.
 	// If exporting to grid is permanently disabled on your inverter, set this to "off"
 	// If exporting to gird is dynamically disabled on your inverter (e.g. when spot price is too low),
@@ -60,6 +64,11 @@ type BatteryConfig struct {
 	// If this entity is provided and is true, then the logic will be inverted and PowerRouter will
 	// prioritize configued devices over the battery.
 	LoadFirstEntity string `yaml:"loadFirstEntity"`
+
+	// In MaximizeUsage mode, reserve at least this many watts for battery charging
+	// when battery SoC is below FullChargePct. Reads from a HA entity (e.g. input_number).
+	// Defaults to 0 (no reservation) if not set.
+	MinBatteryPowerEntity string `yaml:"minBatteryPowerEntity"`
 }
 
 type Consumer struct {

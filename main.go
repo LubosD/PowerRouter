@@ -50,7 +50,8 @@ func runApp() {
 
 	// Power router setup
 	router := &Router{
-		Devices: make([]Device, len(configuration.Consumers)),
+		Devices:       make([]Device, len(configuration.Consumers)),
+		MaximizeUsage: configuration.MaximizeUsage,
 	}
 
 	// Instantiate devices to consume power
@@ -69,7 +70,9 @@ func runApp() {
 				Consumer: cons,
 			}
 		default:
-			panic("Device " + cons.Name + " has unknown type: " + cons.Type)
+			// Unreachable after loadConfig validation; kept as a defensive fallback.
+			log.Println("Skipping device with unknown type:", cons.Name, cons.Type)
+			continue
 		}
 
 		router.Devices[i].Setup()
@@ -120,6 +123,16 @@ func loadConfig(path string) error {
 
 	if configuration.Hass.Port == 0 {
 		configuration.Hass.Port = 8123
+	}
+
+	for i := range configuration.Consumers {
+		cons := &configuration.Consumers[i]
+
+		if cons.Type == "" {
+			cons.Type = "binary"
+		} else if cons.Type != "binary" && cons.Type != "linear" {
+			return errors.New("consumer " + cons.Name + " has unknown type: " + cons.Type)
+		}
 	}
 
 	return nil

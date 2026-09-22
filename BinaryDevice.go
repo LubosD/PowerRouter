@@ -73,6 +73,9 @@ func (d *BinaryDevice) turnOffAllowed() bool {
 
 func (d *BinaryDevice) setPower(on bool) {
 	d.state = on
+	if on {
+		d.lastTurnedOn = time.Now()
+	}
 
 	// Set this state to HASS
 	entityType, _, _ := strings.Cut(d.Consumer.Entity, ".")

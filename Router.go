@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"math"
 	"time"
 
 	ga "saml.dev/gome-assistant"
@@ -182,9 +183,25 @@ func (r *Router) rebalance(watts int) {
 	}
 }
 
+// binaryWeight returns a flexible binary device's "effective cost" against the power budget:
+// the AllowBuyPower portion is considered free (willing to buy that much from the grid),
+// so it doesn't count against the budget. Floored at 0 in case of a misconfigured device
+// where AllowBuyPower > Power.
+func binaryWeight(d *BinaryDevice) int {
+	weight := d.Consumer.Power - d.Consumer.AllowBuyPower
+	if weight < 0 {
+		weight = 0
+	}
+	return weight
+}
+
 // rebalanceMaximize finds the allocation of power across all devices that maximizes total consumption.
-// It enumerates all on/off combinations of flexible binary devices and greedily allocates remaining
-// budget to linear devices in priority order.
+// It solves a 0/1 knapsack over flexible binary devices to find, for every exact amount of budget that
+// could be spent on them, the combination that buys the most "free" power (AllowBuyPower), then combines
+// that with what the linear devices would greedily absorb from whatever budget is left over - checking
+// every possible split between binaries and linears, since the linear devices' payoff is nonlinear (it
+// saturates once their combined capacity is reached), so simply maximizing binary power alone is not
+// always optimal.
 // Returns whether any changes were made and the delay to apply.
 func (r *Router) rebalanceMaximize(budgetWatts int) (adjusted bool, delaySecs int) {
 	type flexBinary struct {
@@ -234,42 +251,13 @@ func (r *Router) rebalanceMaximize(budgetWatts int) (adjusted bool, delaySecs in
 		currentTotal += fl.device.CurrentPower()
 	}
 
-	bestTotal := currentTotal
-	bestBinaryMask := -1
-	bestLinearAllocs := []int(nil)
-
 	numBinaries := len(flexBinaries)
-	numCombinations := 1 << numBinaries
 
-	for mask := 0; mask < numCombinations; mask++ {
-		// Calculate cost of binary devices in this combination
-		binaryCost := 0
-		for bit := 0; bit < numBinaries; bit++ {
-			if mask&(1<<bit) != 0 {
-				fb := flexBinaries[bit]
-				effectiveCost := fb.device.Consumer.Power - fb.device.Consumer.AllowBuyPower
-				binaryCost += effectiveCost
-			}
-		}
-
-		if binaryCost > totalBudget {
-			continue
-		}
-
-		// Remaining budget for linear devices
-		remaining := totalBudget - binaryCost
-
-		// Actual total power used by binary devices (not effective cost, real power)
-		totalUsed := 0
-		for bit := 0; bit < numBinaries; bit++ {
-			if mask&(1<<bit) != 0 {
-				totalUsed += flexBinaries[bit].device.Consumer.Power
-			}
-		}
-
-		// Greedily allocate remaining budget to linear devices in priority order
-		linearAllocs := make([]int, len(flexLinears))
-		for li, fl := range flexLinears {
+	// linearGreedyTotal returns the total power the flexible linear devices would
+	// absorb, greedily in priority order, given `remaining` budget to spend.
+	linearGreedyTotal := func(remaining int) int {
+		total := 0
+		for _, fl := range flexLinears {
 			if remaining <= 0 {
 				break
 			}
@@ -281,19 +269,84 @@ func (r *Router) rebalanceMaximize(budgetWatts int) (adjusted bool, delaySecs in
 			if alloc < fl.device.Consumer.MinPower {
 				alloc = 0
 			}
-			linearAllocs[li] = alloc
-			totalUsed += alloc
+			total += alloc
 			remaining -= alloc
 		}
+		return total
+	}
 
-		if totalUsed > bestTotal {
-			bestTotal = totalUsed
-			bestBinaryMask = mask
-			bestLinearAllocs = linearAllocs
+	// 0/1 knapsack: dp[w] = max total AllowBuyPower ("bonus") achievable from a subset
+	// of flexBinaries whose effective cost (weight) sums to EXACTLY w (unreachable
+	// sums are left as -inf). We need the exact spend - not just "at most" - because
+	// what's left over falls through to the linear devices below.
+	const unreachable = math.MinInt32 / 2
+	dp := make([]int, totalBudget+1)
+	for w := range dp {
+		dp[w] = unreachable
+	}
+	dp[0] = 0
+	included := make([][]bool, numBinaries)
+
+	for i, fb := range flexBinaries {
+		weight := binaryWeight(fb.device)
+		bonus := fb.device.Consumer.Power - weight // AllowBuyPower, consistent with weight's clamping
+
+		included[i] = make([]bool, totalBudget+1)
+		for w := totalBudget; w >= weight; w-- {
+			if dp[w-weight] > unreachable && dp[w-weight]+bonus > dp[w] {
+				dp[w] = dp[w-weight] + bonus
+				included[i][w] = true
+			}
 		}
 	}
 
-	if bestBinaryMask < 0 || bestTotal <= currentTotal {
+	// For every exact binary spend w, real binary power used is w+dp[w] (weight +
+	// bonus = Power of the devices chosen); combine with what that leaves for the
+	// linear devices and pick the split that maximizes the total.
+	bestW := 0
+	bestUsed := unreachable
+	for w := 0; w <= totalBudget; w++ {
+		if dp[w] <= unreachable {
+			continue
+		}
+		used := w + dp[w] + linearGreedyTotal(totalBudget-w)
+		if used > bestUsed {
+			bestUsed = used
+			bestW = w
+		}
+	}
+
+	// Backtrack to recover which devices were selected for spend bestW.
+	bestBinaryMask := 0
+	w := bestW
+	for i := numBinaries - 1; i >= 0; i-- {
+		if included[i][w] {
+			bestBinaryMask |= 1 << i
+			w -= binaryWeight(flexBinaries[i].device)
+		}
+	}
+
+	// Greedily allocate the remaining budget to linear devices in priority order.
+	remaining := totalBudget - bestW
+	totalUsed := bestUsed
+	bestLinearAllocs := make([]int, len(flexLinears))
+	for li, fl := range flexLinears {
+		if remaining <= 0 {
+			break
+		}
+		maxPower := fl.device.Consumer.Power
+		alloc := remaining
+		if alloc > maxPower {
+			alloc = maxPower
+		}
+		if alloc < fl.device.Consumer.MinPower {
+			alloc = 0
+		}
+		bestLinearAllocs[li] = alloc
+		remaining -= alloc
+	}
+
+	if totalUsed <= currentTotal {
 		return false, 0
 	}
 
@@ -327,7 +380,7 @@ func (r *Router) rebalanceMaximize(budgetWatts int) (adjusted bool, delaySecs in
 	}
 
 	if changed {
-		log.Printf("MaximizeUsage: total consumption %d W -> %d W (budget %d W)\n", currentTotal, bestTotal, budgetWatts)
+		log.Printf("MaximizeUsage: total consumption %d W -> %d W (budget %d W)\n", currentTotal, totalUsed, budgetWatts)
 	}
 
 	return changed, maxDelay

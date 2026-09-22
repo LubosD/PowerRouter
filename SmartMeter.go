@@ -36,7 +36,8 @@ func (sm *SmartMeter) handleValues(service *ga.Service, state ga.State, sensor g
 	// log.Println("Received new smartmeter data:", sensor.TriggerEntityId, "=", sensor.ToState)
 	phaseIndex := slices.Index(sm.Entities, sensor.TriggerEntityId)
 	if phaseIndex == -1 {
-		panic("Received SM value change for unknown entity: " + sensor.TriggerEntityId)
+		log.Println("Received SM value change for unknown entity:", sensor.TriggerEntityId)
+		return
 	}
 	value, err := strconv.ParseFloat(sensor.ToState, 32)
 

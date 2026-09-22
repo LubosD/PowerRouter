@@ -95,7 +95,7 @@ func (b *Battery) handleLoadFirst(service *ga.Service, state ga.State, sensor ga
 }
 
 func (b *Battery) handleMinBatteryPower(service *ga.Service, state ga.State, sensor ga.EntityData) {
-	val, err := strconv.ParseFloat(sensor.ToState, 64)
+	val, err := strconv.ParseFloat(sensor.ToState, 32)
 	if err != nil {
 		log.Printf("Cannot parse minBatteryPower value (%s): %v\n", sensor.ToState, err)
 	} else {

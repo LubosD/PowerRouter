@@ -74,10 +74,19 @@ func (r *Router) rebalance(watts int) {
 	didBatteryAdj := false
 
 	if r.Battery != nil {
-		// If we have a battery, the battery isn't fully charged and isn't charging at full power,
-		// then we should add the missing charge power to current grid power, because we prefer storing into battery
-		// over "wasting" it on idle load.
-		if !r.Battery.LoadFirst && r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct && -r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
+		if r.MaximizeUsage && r.Battery.MinBatteryPower > 0 && r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct {
+			// In MaximizeUsage mode with a battery reservation, route all solar to loads
+			// but guarantee at least MinBatteryPower goes to battery.
+			// adj > 0 when battery is below reservation (shed load), adj < 0 when above (add load).
+			adj := (r.Battery.CurrentPower + r.Battery.MinBatteryPower) / 2
+			watts += adj
+			didBatteryAdj = true
+			log.Printf("MaximizeUsage: reserving %dW for battery (SoC %d%%, charging at %dW), adjusting balance by %dW to %dW\n",
+				r.Battery.MinBatteryPower, r.Battery.ChargePct, -r.Battery.CurrentPower, adj, watts)
+		} else if !r.Battery.LoadFirst && r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct && -r.Battery.CurrentPower < r.Battery.Config.MaxChargingPower {
+			// If we have a battery, the battery isn't fully charged and isn't charging at full power,
+			// then we should add the missing charge power to current grid power, because we prefer storing into battery
+			// over "wasting" it on idle load.
 			// Adjust our import power with how many watts could theoretically go into the battery instead
 			adj := r.Battery.Config.MaxChargingPower + r.Battery.CurrentPower
 
@@ -120,19 +129,10 @@ func (r *Router) rebalance(watts int) {
 		// We have excess power going into the grid, let's look for something to turn on
 
 		if r.MaximizeUsage {
-			budgetWatts := -watts
-			if r.Battery != nil && r.Battery.MinBatteryPower > 0 &&
-				r.Battery.ChargePct != -1 && r.Battery.ChargePct < r.Battery.Config.FullChargePct {
-				budgetWatts -= r.Battery.MinBatteryPower
-				log.Printf("Reserving %dW for battery (SoC %d%%), MaximizeUsage budget reduced to %dW\n",
-					r.Battery.MinBatteryPower, r.Battery.ChargePct, budgetWatts)
-			}
-			if budgetWatts > 0 {
-				adjusted, delaySecs := r.rebalanceMaximize(budgetWatts)
-				if adjusted {
-					r.noActionUntil = time.Now().Add(time.Second * time.Duration(delaySecs))
-					adjustedConsumption = true
-				}
+			adjusted, delaySecs := r.rebalanceMaximize(-watts)
+			if adjusted {
+				r.noActionUntil = time.Now().Add(time.Second * time.Duration(delaySecs))
+				adjustedConsumption = true
 			}
 		}
 

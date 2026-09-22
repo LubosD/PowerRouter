@@ -20,6 +20,8 @@ type Battery struct {
 	LastDataAt time.Time
 
 	LoadFirst bool
+
+	MinBatteryPower int
 }
 
 func (b *Battery) Setup(gaApp *ga.App) {
@@ -46,6 +48,16 @@ func (b *Battery) Setup(gaApp *ga.App) {
 			RunOnStartup().
 			Build()
 		gaApp.RegisterEntityListeners(listenerLoadFirst)
+	}
+
+	if b.Config.MinBatteryPowerEntity != "" {
+		listenerMinPower := ga.
+			NewEntityListener().
+			EntityIds(b.Config.MinBatteryPowerEntity).
+			Call(b.handleMinBatteryPower).
+			RunOnStartup().
+			Build()
+		gaApp.RegisterEntityListeners(listenerMinPower)
 	}
 
 	gaApp.RegisterEntityListeners(listenerPct, listenerPower)
@@ -79,5 +91,15 @@ func (b *Battery) handleLoadFirst(service *ga.Service, state ga.State, sensor ga
 		b.LoadFirst = false
 	} else if sensor.ToState == "on" {
 		b.LoadFirst = true
+	}
+}
+
+func (b *Battery) handleMinBatteryPower(service *ga.Service, state ga.State, sensor ga.EntityData) {
+	val, err := strconv.ParseFloat(sensor.ToState, 64)
+	if err != nil {
+		log.Printf("Cannot parse minBatteryPower value (%s): %v\n", sensor.ToState, err)
+	} else {
+		b.MinBatteryPower = int(val)
+		log.Printf("Min battery power reservation set to %dW\n", b.MinBatteryPower)
 	}
 }
